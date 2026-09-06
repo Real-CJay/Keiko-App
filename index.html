@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Daily Keiko</title>
+<meta name="description" content="Daily karate and running practice, built around a physio's programme.">
+<meta name="theme-color" content="#2E4372">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Keiko">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="icon" href="/icons/favicon-64.png" sizes="64x64" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<div class="top">
+  <div class="topinner">
+    <button class="nav" id="prevDay" aria-label="Previous day">‹</button>
+    <div class="tophead">
+      <div class="d1" id="hdDate">—</div>
+      <div class="d2" id="hdPlan">—</div>
+    </div>
+    <button class="nav" id="nextDay" aria-label="Next day">›</button>
+  </div>
+  <div class="topinner" style="justify-content:center;margin-top:2px">
+    <button class="todaybtn" id="jumpToday" hidden>Back to today</button>
+    <span class="syncchip" id="syncChip" hidden>—</span>
+  </div>
+</div>
+
+<main>
+  <!-- ============ TODAY ============ -->
+  <section class="view" id="v-day">
+    <div class="summary">
+      <div class="ring">
+        <svg width="66" height="66" viewBox="0 0 66 66">
+          <circle cx="33" cy="33" r="28" stroke="var(--surface-2)" stroke-width="6" fill="none"></circle>
+          <circle id="ringArc" cx="33" cy="33" r="28" stroke="var(--indigo)" stroke-width="6"
+                  fill="none" stroke-linecap="round" stroke-dasharray="176" stroke-dashoffset="176"></circle>
+        </svg>
+        <div class="pctxt" id="ringPct">0%</div>
+      </div>
+      <div class="sumtxt">
+        <div class="st1" id="sumTitle">—</div>
+        <div class="st2" id="sumSub">—</div>
+        <span class="badge" id="sumBadge" hidden>—</span>
+      </div>
+    </div>
+
+    <div id="runlog" hidden></div>
+    <div class="blocks" id="blocks"></div>
+
+    <section class="card">
+      <h2>Session note</h2>
+      <label class="fld">
+        <span>How did the hip and lower back feel? Bring this to your physio.</span>
+        <textarea id="noteInput" placeholder="e.g. easy run felt slow but fine, small clunk in the left hip on the third hook kick — stopped there"></textarea>
+      </label>
+    </section>
+
+    <section class="card warn">
+      <h2>Stop rules</h2>
+      <ul>
+        <li>Sharp pain, a pinch or a clunk in the hip — stop that rep, drop the height. Don't finish the set.</li>
+        <li>Any lower back pain — end the session, write it in the note, tell your physio.</li>
+        <li>Running distance rises about 10% a week. Never jump.</li>
+        <li>No bouncing, no partner-forced stretches, no straight-leg toe touches, no sit-ups.</li>
+        <li>Nothing above chest height until the hip is cleared.</li>
+        <li>Sunday is rest. Six working days beat seven every time.</li>
+      </ul>
+    </section>
+  </section>
+
+  <!-- ============ CALENDAR ============ -->
+  <section class="view" id="v-cal" hidden>
+    <div class="card">
+      <h2 id="calTitle">—</h2>
+      <div class="btnrow">
+        <button class="btn ghost" id="calPrev">‹ Previous</button>
+        <button class="btn ghost" id="calNext">Next ›</button>
+      </div>
+      <div class="calgrid" id="calDow"></div>
+      <div class="calgrid" id="calGrid"></div>
+      <div class="callegend">
+        <span><i style="background:var(--sage)"></i>completed</span>
+        <span><i style="background:var(--surface-2)"></i>partial or missed</span>
+        <span><i style="background:var(--tatami)"></i>today</span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>The 8-week block</h2>
+      <div class="rows" id="blockRows"></div>
+      <p class="hint" id="blockHint"></p>
+    </div>
+  </section>
+
+  <!-- ============ STATS ============ -->
+  <section class="view" id="v-stats" hidden>
+    <div class="card">
+      <h2>Streaks</h2>
+      <div class="rows" id="streakRows"></div>
+      <p class="hint">A day counts once you have ticked 70% of it. Sundays count at 50% — recovery is the work.</p>
+    </div>
+
+    <div class="card">
+      <h2>Last 14 days</h2>
+      <div class="bars" id="barChart"></div>
+      <div class="barlabels" id="barLabels"></div>
+    </div>
+
+    <div class="card">
+      <h2>Running</h2>
+      <div class="rows" id="runRows"></div>
+      <div id="insights" style="display:flex;flex-direction:column;gap:9px"></div>
+    </div>
+
+    <div class="card">
+      <h2>Pace calculator</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+        <label class="fld"><span>Distance (km)</span><input type="number" id="pcKm" step="0.1" min="0" placeholder="5"></label>
+        <label class="fld"><span>Time (min)</span><input type="number" id="pcMin" step="0.1" min="0" placeholder="27"></label>
+      </div>
+      <div class="rows" id="pcOut"></div>
+    </div>
+
+    <div class="card">
+      <h2>Export a summary</h2>
+      <p class="hint">Builds a plain-text log of what you actually did. Paste it into ChatGPT, or into any coach or notebook.</p>
+      <label class="fld"><span>Range</span>
+        <select id="expRange">
+          <option value="7">Last 7 days</option>
+          <option value="14">Last 14 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="block">This 8-week block</option>
+          <option value="all">Everything logged</option>
+        </select>
+      </label>
+      <label class="fld" style="gap:5px">
+        <span style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="expCtx" checked style="width:auto;margin:0">
+          Include the plan and my constraints at the top
+        </span>
+      </label>
+      <button class="btn" id="expBuild">Build summary</button>
+      <textarea id="expOut" readonly placeholder="Your summary appears here." style="min-height:190px;font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"></textarea>
+      <div class="btnrow">
+        <button class="btn ghost" id="expCopy">Copy</button>
+        <button class="btn ghost" id="expDl">Download .md</button>
+      </div>
+      <p class="hint">On a phone you can also long-press inside the box and choose Select All → Copy.</p>
+    </div>
+
+    <div class="card">
+      <h2>The ladder</h2>
+      <div class="rows">
+        <div class="row"><span class="k">Now</span><span class="v">27:00 · 5:24 /km</span></div>
+        <div class="row"><span class="k">Next target</span><span class="v hl">24:00 · 4:48 /km</span></div>
+        <div class="row"><span class="k">Then</span><span class="v">22:00 · 4:24 /km</span></div>
+        <div class="row"><span class="k">The goal</span><span class="v hl">19:59 · 4:00 /km</span></div>
+      </div>
+      <div class="insight">
+        <b>Easy runs at 6:30–7:00 /km.</b> They are supposed to feel too slow. Running easy days hard is
+        the single most common reason people stall at 24 minutes.
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ============ GUIDE ============ -->
+  <section class="view" id="v-guide" hidden>
+    <div class="card">
+      <h2>How to do everything</h2>
+      <p class="hint">There are no pictures here on purpose — the words are more precise than a photo, and they tell you what a movement should <em>feel</em> like, which a photo never can. Read an entry once before you first attempt the exercise, then check back when something feels off.</p>
+      <label class="fld"><span>Search</span><input type="text" id="guideSearch" placeholder="hip CARs, dead bug, easy run..."></label>
+    </div>
+    <div id="guideBody"></div>
+  </section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section class="view" id="v-set" hidden>
+    <div class="card" id="acctCard">
+      <h2>Account</h2>
+      <div id="acctBody"></div>
+    </div>
+
+    <div class="card">
+      <h2>Reminders</h2>
+      <p class="hint" id="notifState">—</p>
+      <button class="btn" id="notifEnable">Turn on reminders</button>
+      <div id="reminderList" style="display:flex;flex-direction:column;gap:12px"></div>
+      <div class="btnrow">
+        <button class="btn ghost" id="addReminder">+ Add reminder</button>
+        <button class="btn ghost" id="testNotif">Test</button>
+      </div>
+      <p class="hint">
+        Browser reminders only fire while this app is open somewhere on your phone. For alarms that
+        always work, use the calendar export below — it puts your whole week into your phone's calendar
+        with real notifications.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Calendar export</h2>
+      <p class="hint">Downloads an .ics file. Open it on your phone and every training day becomes a repeating calendar event with a real alarm — the only reminders that fire when this app is closed.</p>
+      <label class="fld"><span>Event time</span><input type="time" id="icsTime" value="06:00"></label>
+      <label class="fld"><span>Alarm message</span><input type="text" id="icsMsg" placeholder="Keiko time"></label>
+      <button class="btn" id="icsBtn">Download calendar file</button>
+
+      <h2 style="margin-top:6px">Or add to Google Calendar</h2>
+      <p class="hint">One tap per day. Opens Google Calendar with a weekly repeating event already filled in — no file, works from either version of the app.</p>
+      <div class="btnrow" id="gcalLinks"></div>
+      <p class="hint">Google uses your calendar's default reminder, usually 30 minutes before. To be alerted at the exact time, open Google Calendar settings and set the default notification to 0 minutes.</p>
+    </div>
+
+    <div class="card">
+      <h2>Block start date</h2>
+      <label class="fld"><span>Day 1 of your 8-week block</span><input type="date" id="startDate"></label>
+      <p class="hint">The plan runs 56 days from here. Changing this does not delete anything you have ticked.</p>
+    </div>
+
+    <div class="card">
+      <h2>Appearance</h2>
+      <label class="fld"><span>Theme</span>
+        <select id="themeSel">
+          <option value="auto">Match my phone</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="card">
+      <h2>Backup</h2>
+      <p class="hint">This app stores everything on this device only. Clearing your browser data erases it. Export a backup now and then.</p>
+      <div class="btnrow">
+        <button class="btn ghost" id="expBtn">Export backup</button>
+        <button class="btn ghost" id="impBtn">Import backup</button>
+        <input type="file" id="impFile" accept="application/json,.json" hidden>
+      </div>
+      <button class="btn danger" id="resetBtn">Erase all data</button>
+    </div>
+
+    <div class="card">
+      <h2>Install on your phone</h2>
+      <p class="hint">
+        <b>Android / Brave / Chrome:</b> open the site, tap the ⋮ menu, then "Install app" or
+        "Add to Home screen".<br>
+        <b>iPhone:</b> open in Safari, tap Share, then "Add to Home Screen".<br>
+        <b>Desktop:</b> look for the install icon at the right of the address bar.
+      </p>
+      <p class="hint">
+        Once installed it opens full screen with its own icon and works with no internet.
+        If you are signed in, anything you tick offline syncs the next time you have a connection.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>About this plan</h2>
+      <p class="hint">
+        Built around your physio's programme, never instead of it — their set goes before and after every
+        session, 7-second holds as given. If anything here contradicts what they told you, theirs wins.
+        Tell them you have added two running days.
+      </p>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs" id="tabs">
+  <button class="tab" data-view="v-day" aria-selected="true">
+    <svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg><span>Today</span>
+  </button>
+  <button class="tab" data-view="v-cal" aria-selected="false">
+    <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>Calendar</span>
+  </button>
+  <button class="tab" data-view="v-stats" aria-selected="false">
+    <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Progress</span>
+  </button>
+  <button class="tab" data-view="v-guide" aria-selected="false">
+    <svg viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5zM20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z"/></svg><span>Guide</span>
+  </button>
+  <button class="tab" data-view="v-set" aria-selected="false">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg><span>Settings</span>
+  </button>
+</nav>
+
+<script src="/config.js"></script>
+<script src="/guide.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" defer></script>
+<script src="/app.js" defer></script>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("/sw.js").catch(function () {});
+    });
+  }
+</script>
+</body>
+</html>
