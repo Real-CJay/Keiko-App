@@ -2,7 +2,7 @@
    Plain ES5-flavoured JavaScript, no build step. Three parts:
      1. the app itself (state, day view, calendar, stats, settings)
      2. the guide renderer
-     3. optional Supabase sign-in and sync
+     3. optional Firebase sign-in and sync
    guide.js and config.js load before this file. */
 
 (function(){
@@ -24,7 +24,7 @@ var BLOCKS = {
     {n:"Hip CARs, wall-supported", c:"Knee to hip height, biggest slow circle you can draw. Slow is the point.", d:"5 each way ×2"},
     {n:"90/90 switches", c:"Sitting, both knees at 90°, rotate side to side. This is the internal rotation ura mawashi needs.", d:"10 switches"},
     {n:"Cossack squat, chair-supported", c:"Shallow. Only as deep as stays painless.", d:"8 each side"},
-    {n:"Mawashi chamber hold", c:"Chamber the kick, hold, then extend slowly and re-chamber.", d:"15 s ×3 each"},
+    {n:"Mawashi chamber hold", c:"Start lying on your side — no balance needed. Knee bent and lifted, heel tucked. The standing version comes later.", d:"10 s ×3 each"},
     {n:"Adductor rock-back", c:"Hands and knees, one leg out to the side, rock back gently.", d:"10 slow"}
   ]},
   kihon:{ name:"Kihon — basics", items:[
@@ -64,7 +64,8 @@ var BLOCKS = {
     {n:"Half-kneeling hip flexor", c:"Squeeze the back glute, tuck the tailbone. If your back arches, you're doing it wrong.", d:"40 s each"},
     {n:"Figure-4 glute stretch, lying", c:"", d:"40 s each"},
     {n:"Butterfly, gentle", c:"Elbows resting, no pushing the knees down.", d:"60 s"},
-    {n:"Calf stretch at a wall", c:"Essential now that you are running.", d:"30 s each"}
+    {n:"Calf stretch at a wall", c:"Essential now that you are running.", d:"30 s each"},
+    {n:"Supported leg hold at a wall", c:"Foot resting on a wall at waist height or lower, body turned as in mawashi. Mild tension only, pelvis level.", d:"30 s each"}
   ]},
   easyrun:{ name:"Easy run", run:true, items:[
     {n:"Walk or jog to start", c:"Never begin at pace. Let the legs come up to speed.", d:"3 min"},
@@ -1264,9 +1265,16 @@ setInterval(function(){
 
 
 /* =========================================================================
-   SYNC — optional Supabase sign-in and two-device merge.
-   With no keys in config.js this whole module stays quiet and the app
-   behaves exactly as it did before: everything on one device.
+   SYNC — optional Firebase sign-in and two-device merge.
+   With no config in config.js this module stays quiet and the app behaves
+   exactly as it did before: everything on one device.
+
+   Data shape in Firestore:
+     users/{uid}/days/{YYYY-MM-DD}   ->  { c, note, km, min, ts }
+     users/{uid}/meta/settings       ->  { start, reminders, theme, ts }
+
+   `ts` is a millisecond client timestamp. Whichever copy of a day has the
+   higher ts wins. For one person on two devices that is exactly right.
    ========================================================================= */
 (function(){
   "use strict";
@@ -1276,111 +1284,141 @@ setInterval(function(){
 
   var acctBody = document.getElementById("acctBody");
   var chip = document.getElementById("syncChip");
-  var client = null, user = null, timer = null, busy = false, lastSync = null;
+  var auth = null, fs = null, user = null;
+  var timer = null, busy = false, lastSync = null;
+  var lastPullTs = 0;                 // highest remote ts we have already seen
+
+  var PULL_KEY = "dailykeiko.pullts";
+  try{ lastPullTs = parseInt(localStorage.getItem(PULL_KEY) || "0", 10) || 0; }catch(e){}
 
   function setChip(state, label){
     if(!chip) return;
-    if(!client){ chip.hidden = true; return; }
+    if(!auth){ chip.hidden = true; return; }
     chip.hidden = false;
-    chip.className = "syncchip " + state;
+    chip.className = "syncchip " + (state || "");
     chip.textContent = label;
   }
 
   function configured(){
-    return !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY &&
-              window.supabase && window.supabase.createClient);
+    var f = CFG.FIREBASE || {};
+    return !!(f.apiKey && f.projectId && window.firebase &&
+              window.firebase.initializeApp && window.firebase.firestore);
   }
 
-  /* ---------------- merge -------------------------------------------- */
-  function localDays(){ return APP.getStore().days || {}; }
+  function userDoc(){ return fs.collection("users").doc(user.uid); }
 
-  function mergeRemoteDay(day, data, ts){
+  /* ---------------- merge -------------------------------------------- */
+  function mergeRemoteDay(day, d){
     var st = APP.getStore();
+    var ts = Number(d.ts || 0);
     var mine = st.days[day];
-    if(!mine || (ts || 0) > (mine.ts || 0)){
+    if(!mine || ts > (mine.ts || 0)){
       st.days[day] = {
-        c: (data && data.c) || {},
-        note: (data && data.note) || "",
-        km: data ? (data.km === undefined ? null : data.km) : null,
-        min: data ? (data.min === undefined ? null : data.min) : null,
-        ts: ts || 0
+        c: d.c || {},
+        note: d.note || "",
+        km: (d.km === undefined || d.km === null) ? null : d.km,
+        min: (d.min === undefined || d.min === null) ? null : d.min,
+        ts: ts
       };
       return true;
     }
     return false;
   }
 
-  function mergeRemoteSettings(data, ts){
+  function mergeRemoteSettings(d){
     var st = APP.getStore();
-    if((ts || 0) > (st.settingsTs || 0)){
-      if(data.start) st.start = data.start;
-      if(Array.isArray(data.reminders)) st.reminders = data.reminders;
-      if(data.theme) st.theme = data.theme;
-      st.settingsTs = ts || 0;
+    var ts = Number(d.ts || 0);
+    if(ts > (st.settingsTs || 0)){
+      if(d.start) st.start = d.start;
+      if(Array.isArray(d.reminders)) st.reminders = d.reminders;
+      if(d.theme) st.theme = d.theme;
+      st.settingsTs = ts;
       return true;
     }
     return false;
   }
 
-  /* ---------------- sync --------------------------------------------- */
-  function syncNow(silent){
-    if(!client || !user || busy) return Promise.resolve();
+  function hasContent(d){
+    return !!((d.c && Object.keys(d.c).length) || (d.note || "").trim() || d.km || d.min);
+  }
+
+  /* ---------------- sync ---------------------------------------------- */
+  /* full = read every day document. Used on first sync of a device and by
+     the Sync now button. Otherwise only days newer than what we last saw are
+     fetched, which keeps the daily read count tiny. */
+  function syncNow(silent, full){
+    if(!auth || !user || busy) return Promise.resolve();
     busy = true;
     setChip("busy", "Syncing…");
 
     var st = APP.getStore();
     var changed = false;
+    var since = full ? 0 : lastPullTs;
+    var days = userDoc().collection("days");
+    var maxSeen = lastPullTs;
 
-    return client.from("keiko_days").select("day,data,ts").eq("user_id", user.id)
-      .then(function(res){
-        if(res.error) throw res.error;
-        var remote = {};
-        (res.data || []).forEach(function(r){
-          remote[r.day] = r;
-          if(mergeRemoteDay(r.day, r.data, Number(r.ts))) changed = true;
+    return days.where("ts", ">", since).get()
+      .then(function(snap){
+        snap.forEach(function(doc){
+          var d = doc.data() || {};
+          if(Number(d.ts || 0) > maxSeen) maxSeen = Number(d.ts || 0);
+          if(mergeRemoteDay(doc.id, d)) changed = true;
         });
-
-        /* push anything local that is newer or missing upstream */
-        var rows = [];
-        Object.keys(localDays()).forEach(function(day){
+      })
+      .then(function(){
+        /* push local days that the server has not got, or has an older copy of */
+        var pending = [];
+        Object.keys(st.days).forEach(function(day){
           var d = st.days[day];
-          var hasContent = (d.c && Object.keys(d.c).length) || (d.note || "").trim() || d.km || d.min;
-          if(!hasContent) return;
-          var r = remote[day];
-          if(!r || (d.ts || 0) > Number(r.ts || 0)){
-            rows.push({
-              user_id: user.id, day: day, ts: d.ts || Date.now(),
-              data: { c: d.c || {}, note: d.note || "", km: d.km, min: d.min }
-            });
-          }
+          if(!hasContent(d)) return;
+          if((d.ts || 0) > lastPullTs) pending.push(day);
         });
-        if(!rows.length) return null;
-        /* chunked so a long history does not make one huge request */
+        if(!pending.length) return;
+
         var chunks = [], i;
-        for(i = 0; i < rows.length; i += 200) chunks.push(rows.slice(i, i+200));
+        for(i = 0; i < pending.length; i += 400) chunks.push(pending.slice(i, i + 400));
         return chunks.reduce(function(p, chunk){
           return p.then(function(){
-            return client.from("keiko_days").upsert(chunk, { onConflict:"user_id,day" });
+            var batch = fs.batch();
+            chunk.forEach(function(day){
+              var d = st.days[day];
+              batch.set(days.doc(day), {
+                c: d.c || {}, note: d.note || "",
+                km: (d.km === undefined) ? null : d.km,
+                min: (d.min === undefined) ? null : d.min,
+                ts: d.ts || Date.now()
+              });
+              if((d.ts || 0) > maxSeen) maxSeen = d.ts || 0;
+            });
+            return batch.commit();
           });
         }, Promise.resolve());
       })
       .then(function(){
-        return client.from("keiko_settings").select("data,ts").eq("user_id", user.id).maybeSingle();
+        return userDoc().collection("meta").doc("settings").get();
       })
-      .then(function(res){
-        if(res && res.data && mergeRemoteSettings(res.data.data || {}, Number(res.data.ts))) changed = true;
+      .then(function(doc){
+        var remoteTs = -1;
+        if(doc && doc.exists){
+          var d = doc.data() || {};
+          remoteTs = Number(d.ts || 0);
+          if(mergeRemoteSettings(d)) changed = true;
+        }
         var st2 = APP.getStore();
-        var remoteTs = (res && res.data) ? Number(res.data.ts || 0) : -1;
         if((st2.settingsTs || 0) > remoteTs){
-          return client.from("keiko_settings").upsert({
-            user_id: user.id, ts: st2.settingsTs || Date.now(),
-            data: { start: st2.start, reminders: st2.reminders, theme: st2.theme }
-          }, { onConflict:"user_id" });
+          return userDoc().collection("meta").doc("settings").set({
+            start: st2.start,
+            reminders: st2.reminders || [],
+            theme: st2.theme || "auto",
+            ts: st2.settingsTs || Date.now()
+          });
         }
       })
       .then(function(){
         busy = false;
         lastSync = new Date();
+        lastPullTs = maxSeen;
+        try{ localStorage.setItem(PULL_KEY, String(lastPullTs)); }catch(e){}
         APP.save();
         if(changed){ APP.applyTheme(); APP.renderAll(); }
         setChip("ok", "Synced");
@@ -1395,22 +1433,34 @@ setInterval(function(){
   }
 
   function readable(err){
-    var m = (err && (err.message || err.error_description)) || "Something went wrong";
-    if(/Invalid login/i.test(m)) return "Wrong email or password";
-    if(/already registered/i.test(m)) return "That email already has an account — sign in instead";
-    if(/Password should be/i.test(m)) return "Password needs at least 6 characters";
-    if(/rate limit|too many/i.test(m)) return "Too many attempts. Wait a minute and try again";
-    if(/relation .* does not exist/i.test(m)) return "Database tables missing — run supabase/schema.sql";
-    if(/Failed to fetch|NetworkError/i.test(m)) return "No connection";
-    return m;
+    var code = (err && err.code) || "";
+    var map = {
+      "auth/invalid-credential":     "Wrong email or password",
+      "auth/wrong-password":         "Wrong email or password",
+      "auth/user-not-found":         "No account with that email — create one first",
+      "auth/invalid-email":          "That email address does not look right",
+      "auth/email-already-in-use":   "That email already has an account — sign in instead",
+      "auth/weak-password":          "Password needs at least 6 characters",
+      "auth/too-many-requests":      "Too many attempts. Wait a minute and try again",
+      "auth/network-request-failed": "No connection",
+      "auth/operation-not-allowed":  "Email sign-in is off — turn it on in Firebase Authentication",
+      "permission-denied":           "Blocked by security rules — publish firestore.rules",
+      "unavailable":                 "No connection",
+      "failed-precondition":         "Firestore is not set up yet — create the database in the Firebase console"
+    };
+    if(map[code]) return map[code];
+    return (err && err.message) || "Something went wrong";
   }
 
   function schedule(){
-    if(!client || !user) return;
+    if(!auth || !user) return;
     clearTimeout(timer);
-    timer = setTimeout(function(){ syncNow(true); }, 2500);
+    timer = setTimeout(function(){ syncNow(true, false); }, 2500);
   }
-  window.KEIKO_SYNC = { schedule: schedule, syncNow: syncNow };
+  window.KEIKO_SYNC = {
+    schedule: schedule,
+    syncNow: function(silent){ return syncNow(silent, true); }
+  };
 
   /* ---------------- account UI ---------------------------------------- */
   function el(tag, cls, text){
@@ -1436,8 +1486,8 @@ setInterval(function(){
 
     if(!configured()){
       acctBody.appendChild(el("p","hint",
-        "Sign-in is switched off because config.js has no Supabase keys yet. The app works fully without it — everything is stored on this device. Add the two keys from your Supabase project to turn on sync across your phone and PC."));
-      setChip("", "");
+        "Sign-in is switched off because config.js has no Firebase settings yet. The app works fully without it — everything is stored on this device. Paste your Firebase web config into config.js to turn on sync between your phone and your PC."));
+      if(chip) chip.hidden = true;
       return;
     }
 
@@ -1455,7 +1505,7 @@ setInterval(function(){
 
       var br = el("div","btnrow");
       var sync = el("button","btn","Sync now");
-      sync.addEventListener("click", function(){ syncNow(false); });
+      sync.addEventListener("click", function(){ syncNow(false, true); });
       var out = el("button","btn danger","Sign out");
       out.addEventListener("click", function(){
         APP.confirmBox({
@@ -1464,8 +1514,9 @@ setInterval(function(){
           ok:"Sign out", danger:true
         }).then(function(yes){
           if(!yes) return;
-          client.auth.signOut().then(function(){
-            user = null; lastSync = null; setChip("", ""); if(chip) chip.hidden = true;
+          auth.signOut().then(function(){
+            user = null; lastSync = null;
+            if(chip) chip.hidden = true;
             renderAccount(); APP.toast("Signed out");
           });
         });
@@ -1473,7 +1524,7 @@ setInterval(function(){
       br.appendChild(sync); br.appendChild(out);
       acctBody.appendChild(br);
       acctBody.appendChild(el("p","hint",
-        "Your training syncs automatically a couple of seconds after any change, and whenever you open the app."));
+        "Syncs automatically a couple of seconds after any change, when you open the app, and when you come back online. Sync now does a full re-read of everything."));
       return;
     }
 
@@ -1492,82 +1543,80 @@ setInterval(function(){
     br2.appendChild(inBtn); br2.appendChild(upBtn);
     acctBody.appendChild(br2);
 
-    function attempt(fn, verb){
+    function attempt(which, verb){
       var e = email.input.value.trim(), p = pw.input.value;
       if(!e || !p){ APP.toast("Email and password, please"); return; }
       inBtn.disabled = upBtn.disabled = true;
       setChip("busy", verb + "…");
-      fn({ email:e, password:p }).then(function(res){
+      var call = (which === "up")
+        ? auth.createUserWithEmailAndPassword(e, p)
+        : auth.signInWithEmailAndPassword(e, p);
+      call.then(function(cred){
         inBtn.disabled = upBtn.disabled = false;
-        if(res.error){ setChip("bad","Not signed in"); APP.toast(readable(res.error)); return; }
-        if(!res.data || !res.data.session){
-          setChip("", "Check email");
-          APP.toast("Check your email to confirm the account, then sign in");
-          return;
-        }
-        user = res.data.user;
+        user = cred.user;
         APP.toast("Signed in");
         renderAccount();
-        syncNow(true);
-      }, function(err){
+        syncNow(true, true);
+      }).catch(function(err){
         inBtn.disabled = upBtn.disabled = false;
-        setChip("bad","Not signed in");
+        setChip("bad", "Not signed in");
         APP.toast(readable(err));
       });
     }
-    inBtn.addEventListener("click", function(){ attempt(client.auth.signInWithPassword.bind(client.auth), "Signing in"); });
-    upBtn.addEventListener("click", function(){ attempt(client.auth.signUp.bind(client.auth), "Creating"); });
+    inBtn.addEventListener("click", function(){ attempt("in", "Signing in"); });
+    upBtn.addEventListener("click", function(){ attempt("up", "Creating"); });
 
     if(CFG.ENABLE_GOOGLE){
       var g = el("button","btn ghost","Continue with Google");
       g.addEventListener("click", function(){
-        client.auth.signInWithOAuth({
-          provider:"google",
-          options:{ redirectTo: window.location.origin }
-        });
+        var provider = new window.firebase.auth.GoogleAuthProvider();
+        auth.signInWithPopup(provider).catch(function(err){ APP.toast(readable(err)); });
       });
       acctBody.appendChild(g);
     }
   }
 
-  /* ---------------- boot ---------------------------------------------- */
+  /* ---------------- boot ----------------------------------------------- */
   function boot(){
     if(!configured()){ renderAccount(); return; }
     try{
-      client = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
-        auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }
-      });
-    }catch(e){ client = null; renderAccount(); return; }
+      if(!window.firebase.apps.length) window.firebase.initializeApp(CFG.FIREBASE);
+      auth = window.firebase.auth();
+      fs = window.firebase.firestore();
+    }catch(e){
+      auth = null; fs = null;
+      renderAccount();
+      return;
+    }
 
     setChip("", "Not signed in");
-    client.auth.getSession().then(function(res){
-      user = (res && res.data && res.data.session) ? res.data.session.user : null;
-      renderAccount();
-      if(user) syncNow(true);
-    }).catch(function(){ renderAccount(); });
 
-    client.auth.onAuthStateChange(function(_evt, session){
-      var next = session ? session.user : null;
-      var changed = (next && next.id) !== (user && user.id);
-      user = next;
+    auth.onAuthStateChanged(function(u){
+      var wasId = user && user.uid;
+      user = u || null;
       renderAccount();
-      if(user && changed) syncNow(true);
+      if(user){
+        setChip("", "Signed in");
+        if(user.uid !== wasId) syncNow(true, true);
+      }else{
+        setChip("", "Not signed in");
+      }
     });
 
     document.addEventListener("visibilitychange", function(){
-      if(!document.hidden && user) syncNow(true);
+      if(!document.hidden && user) syncNow(true, false);
     });
-    window.addEventListener("online", function(){ if(user) syncNow(true); });
+    window.addEventListener("online", function(){ if(user) syncNow(true, false); });
     window.addEventListener("offline", function(){ if(user) setChip("bad","Offline"); });
   }
 
-  /* the Supabase script is deferred, so wait for it if it has not landed */
-  if(window.supabase || !CFG.SUPABASE_URL) boot();
+  /* the Firebase scripts are deferred, so wait for them if they have not landed */
+  if(window.firebase || !(CFG.FIREBASE && CFG.FIREBASE.apiKey)) boot();
   else{
     var tries = 0;
     var iv = setInterval(function(){
       tries++;
-      if(window.supabase || tries > 40){ clearInterval(iv); boot(); }
+      if(window.firebase || tries > 50){ clearInterval(iv); boot(); }
     }, 100);
   }
 })();

@@ -18,7 +18,7 @@ config.js               ← the only file you need to edit
 sw.js                   service worker (offline support)
 manifest.webmanifest    makes it installable
 icons/                  app icons
-supabase/schema.sql     run this once in Supabase
+firestore.rules         paste this into the Firebase console
 vercel.json             caching headers
 ```
 
@@ -26,8 +26,8 @@ vercel.json             caching headers
 
 ## Deploy it in five minutes (no account, local-only)
 
-You can skip Supabase entirely at first. The app works fully without it — sign-in just stays
-switched off and everything is stored in that browser.
+You can skip the database entirely at first. The app works fully without it —
+sign-in just stays switched off and everything is stored in that browser.
 
 1. Create a repo, push this folder, and import it on [vercel.com](https://vercel.com) — no build
    command, no framework preset, output directory is the root.
@@ -37,51 +37,59 @@ That's it. It's a static site.
 
 ---
 
-## Turn on sign-in and sync
+## Turn on sign-in and sync (Firebase)
 
-### 1. Create the Supabase project
+Free, no card, and no project limit to run into. The whole app uses a few kilobytes and maybe a
+hundred database reads a day — the free Spark plan allows 50,000.
 
-Go to [supabase.com](https://supabase.com), create a free project, and wait for it to finish
-provisioning.
+### 1. Create the project
 
-### 2. Create the tables
+[console.firebase.google.com](https://console.firebase.google.com) → **Add project**. Give it a
+name. You can turn Google Analytics off; it isn't needed.
 
-In your project: **SQL Editor → New query**. Paste the whole of `supabase/schema.sql` and run
-it. This creates two tables and switches on Row Level Security, which is what makes each row
-readable only by the person who wrote it.
+### 2. Turn on email sign-in
 
-### 3. Turn off email confirmation (optional, but do it)
+**Build → Authentication → Get started → Email/Password → Enable → Save.**
 
-**Authentication → Sign In / Providers → Email** and turn off *Confirm email*. Without this,
-signing up sends you a confirmation link before you can use the account — fine, but a nuisance
-for a personal app.
+Unlike some services this needs no email confirmation step, so accounts work the moment you
+create them.
 
-### 4. Paste your keys into `config.js`
+### 3. Create the database
 
-**Project Settings → API**:
+**Build → Firestore Database → Create database.** Pick a location near you
+(`asia-south1` is the closest to Sri Lanka). Start in **production mode** — the rules in the
+next step replace whatever it starts with.
 
-```js
-window.KEIKO_CONFIG = {
-  SUPABASE_URL: "https://xxxxxxxxxxxx.supabase.co",
-  SUPABASE_ANON_KEY: "eyJhbGciOi...",
-  ENABLE_GOOGLE: false
-};
-```
+### 4. Publish the security rules
 
-**The anon key is meant to be public.** It is safe in this file and safe in a public repo — it
-is the key browsers are supposed to hold. What protects your data is Row Level Security from
-step 2. The one you must never put here is the `service_role` key, which bypasses all of it.
+**Firestore Database → Rules.** Delete what is there, paste the whole of `firestore.rules`
+from this folder, and press **Publish**.
 
-### 5. Redeploy, then sign up inside the app
+Do not skip this. Without it, either nothing works or everything is public.
 
-Settings → Account → enter an email and password → **Create account**. Do the same on your
-other device with the same details and they will merge.
+### 5. Register a web app and copy the config
+
+**Project settings (the gear icon) → General → Your apps → the `</>` web icon.** Give it a
+nickname, skip Firebase Hosting, and it shows you a `firebaseConfig` object. Copy those values
+into `config.js`.
+
+**The apiKey is not a secret.** Google documents this explicitly — it only identifies your
+project. The rules from step 4 are what protect your data. It is fine in a public repo.
+
+### 6. Authorise your domain
+
+**Authentication → Settings → Authorized domains → Add domain**, and add your Vercel domain
+(`your-app.vercel.app`). Sign-in is blocked from domains not on this list.
+
+### 7. Redeploy, then sign up inside the app
+
+Settings → Account → email and password → **Create account**. Do the same on your other device
+with the same details and the two will merge.
 
 ### Adding Google sign-in later (optional)
 
-**Authentication → Providers → Google**, follow their setup, add
-`https://your-app.vercel.app` to your Supabase **Site URL** and redirect allow-list, then set
-`ENABLE_GOOGLE: true` in `config.js`.
+**Authentication → Sign-in method → Google → Enable**, then set `ENABLE_GOOGLE: true` in
+`config.js`.
 
 ---
 
@@ -100,15 +108,21 @@ syncs the next time you have a connection.
 
 ## How syncing works
 
-Each day is one row, carrying a millisecond timestamp of when you last changed it. On sync the
-app pulls every row, keeps whichever version of each day has the newer timestamp, and pushes
-back anything local that is newer. Settings sync the same way as a single row.
+Each day is one Firestore document at `users/{uid}/days/{date}`, carrying a millisecond
+timestamp of when you last changed it. On sync the app fetches the days that changed since it
+last looked, keeps whichever version of each day has the newer timestamp, and pushes back
+anything local that is ahead. Settings live in a single document at `users/{uid}/meta/settings`
+and work the same way.
+
+Automatic syncs are incremental, so a normal day costs a handful of reads. The **Sync now**
+button does a full re-read of everything, which is the one to press if two devices ever look
+out of step.
 
 This is last-write-wins per day. For one person on two devices it is exactly right. It is not
 built for two people editing the same day at the same moment — and it doesn't need to be.
 
 Syncing happens on open, a couple of seconds after any change, when the tab becomes visible
-again, and when you come back online. There is a **Sync now** button if you want to force it.
+again, and when you come back online.
 
 The chip at the top of the screen shows the state: *Synced*, *Syncing…*, *Offline*, or *Sync
 failed*.
@@ -141,13 +155,16 @@ next to it starts working.
 After changing any file, bump `CACHE_VERSION` at the top of `sw.js` so installed copies pick up
 the new version instead of serving the cached one.
 
+The Firebase library version is pinned in three `<script>` tags at the bottom of `index.html`.
+If one ever 404s, bump all three to the current release.
+
 ---
 
 ## Your data
 
-Stored in `localStorage` on each device, and in your own Supabase project if you set one up.
+Stored in `localStorage` on each device, and in your own Firebase project if you set one up.
 Nothing goes anywhere else. There is no analytics, no tracking, and the only third-party
-requests the page makes are Google Fonts and the Supabase client library on a CDN.
+requests the page makes are Google Fonts and the Firebase library from Google's CDN.
 
 Settings → Backup exports everything as JSON, and imports it back. Worth doing occasionally
 even with sync switched on.

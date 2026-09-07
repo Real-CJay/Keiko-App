@@ -1,6 +1,6 @@
 /* Daily Keiko service worker — offline first.
    Bump CACHE_VERSION whenever you change any file in PRECACHE. */
-var CACHE_VERSION = "keiko-v1";
+var CACHE_VERSION = "keiko-v2";
 var PRECACHE = [
   "/",
   "/index.html",
@@ -44,8 +44,10 @@ self.addEventListener("fetch", function(e){
   var url;
   try{ url = new URL(req.url); }catch(err){ return; }
 
-  // Never cache Supabase traffic — auth and data must always hit the network.
-  if(url.hostname.indexOf("supabase") !== -1) return;
+  // Never cache auth or database traffic — it must always hit the network.
+  // (Note this must NOT catch fonts.googleapis.com, which we do want cached.)
+  if(/^(firestore|identitytoolkit|securetoken)\.googleapis\.com$/.test(url.hostname) ||
+     /\.firebaseio\.com$|\.firebaseapp\.com$/.test(url.hostname)) return;
 
   // App shell: navigations always resolve to index.html so deep links work offline.
   if(req.mode === "navigate"){
@@ -74,7 +76,7 @@ self.addEventListener("fetch", function(e){
     return;
   }
 
-  // Cross-origin (the Supabase client library on a CDN): cache after first load
+  // Cross-origin (the Firebase library on gstatic, fonts): cache after first load
   // so the app still boots with no connection.
   e.respondWith(
     caches.match(req).then(function(hit){

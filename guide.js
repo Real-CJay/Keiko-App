@@ -172,17 +172,18 @@ window.KEIKO_GUIDE = {
       },
       {
         n: "Mawashi chamber hold",
-        setup: "Beside a wall, hand on the wall. Stand tall on one leg.",
-        doIt: "Bring the other leg into the roundhouse chamber: knee lifted and pointing across your body toward the target, heel tucked close to your bottom, shin folded. Hold that shape for fifteen seconds without the knee dropping. Then extend the leg slowly to chest height, hold a beat, and fold it back to the chamber before putting the foot down. Three per side.",
-        feel: "Burning in the hip flexor and the outside of the standing hip. It is meant to be hard. The height at which the knee starts to sag is your honest current range.",
-        wrong: "The hip crease pinching, or the whole hip feeling unstable. Lower the knee and hold there instead.",
+        setup: "Start LYING ON YOUR SIDE, not standing. Bottom leg bent for stability, head resting on your arm, body in a straight line. This removes balance and the standing leg entirely, so all the effort goes into the hip you are actually training.",
+        doIt: "Lift the top leg into the roundhouse chamber: knee bent and lifted toward the ceiling, heel tucked in close to your bottom, shin folded. Hold that shape for ten seconds without the knee dropping. Lower slowly. Three per side.",
+        feel: "Working, slightly burning, on the outside and front of the hip. It is meant to be hard — but you should not be fighting for balance at the same time.",
+        wrong: "Pinching at the front of the hip crease. Lower the knee and hold there instead. Lower back sensation means you are letting your body roll backward — keep the hips stacked.",
         mistakes: [
-          "Letting the knee drift down through the hold. Hold at a height you can actually keep for the full fifteen seconds, even if it is low.",
-          "Dropping the leg to the floor after the extension. Always re-chamber first — that is where the control is built, and it is what stops the uncontrolled drop that hurts hips."
+          "Going straight to the standing version. This is the exercise most people cannot do on day one, and the standing version adds balance and standing-leg fatigue on top of the actual work.",
+          "Letting the knee drift down through the hold. Hold at a height you can genuinely keep for the full ten seconds, even if it is low.",
+          "Rolling the body backward to lift the knee higher. Hips stay stacked; if you have to roll, the knee is too high."
         ],
-        easier: "Hold for eight seconds. Or hold the chamber only and skip the extension.",
-        harder: "Twenty seconds, no wall, and add a slow second extension.",
-        why: "Kicking height is limited by strength at the top of your range far more often than by flexibility. This builds it directly."
+        easier: "Five-second holds. Or hold with the knee only slightly lifted.",
+        harder: "The progression, over weeks rather than days: lying on your side, then sitting tall on a chair lifting the knee into chamber, then standing with two hands on a chair back, then standing with one hand on a wall for fifteen seconds, and only then adding the slow extension and re-chamber.",
+        why: "Kicking height is limited by strength at the top of your range far more often than by flexibility. This builds it directly — and building it lying down first means you can actually do the reps instead of wobbling through them."
       },
       {
         n: "Adductor rock-back",
@@ -573,6 +574,22 @@ window.KEIKO_GUIDE = {
           "Letting the back foot turn outward. Toes point at the wall.",
           "Skipping this now that you are running. Calves and Achilles take the biggest new load from running, and this is what keeps them happy."
         ]
+      },
+      {
+        n: "Supported leg hold at a wall",
+        setup: "Stand side-on to a wall, a door frame, or a low ledge. Rest the inside of your ankle or heel on it at a height where you feel MILD tension — waist height or lower to start. Not the highest you can reach.",
+        doIt: "Turn your standing foot out slightly, the way it pivots in mawashi geri, and turn your body to match. Stand tall and hold for 30 seconds, breathing out slowly. Swap sides.",
+        feel: "A broad stretch down the inside of the raised leg and through the groin. Steady and unremarkable — it should not build or bite.",
+        wrong: "Pinching at the front of the hip crease. That is the joint, not a muscle. Come down at once and rest the foot lower.",
+        mistakes: [
+          "Chasing height. The point is a comfortable held position, not a personal best. Waist height done well beats chest height done by cheating.",
+          "Letting the standing-side hip hike up to buy extra height. Keep the pelvis level — if one hip rides up, the stretch has become a spine problem.",
+          "Doing it cold, before training. This belongs in the cool-down, when you are warm.",
+          "Having a partner hold the leg instead of a wall. Never. A partner cannot feel your hip, and forced partner stretching is exactly what injured your back."
+        ],
+        easier: "Rest the foot on a chair seat instead of a wall, and stand further back.",
+        harder: "A few centimetres higher, and only when the current height is completely comfortable across several sessions.",
+        why: "A gentle passive stretch is a useful extra, but it is the smaller half of the job. Your kicks are limited more by control than by length, so the 90/90 switches and the chamber holds stay the main work and this rounds it off."
       }
     ],
 

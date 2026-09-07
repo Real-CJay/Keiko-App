@@ -1,27 +1,41 @@
 /* ---------------------------------------------------------------------------
    Daily Keiko — configuration
 
-   Fill these two values in and the app gains sign-in and cross-device sync.
-   Leave them empty and the app still works perfectly — it just stores
-   everything on the one device, exactly like the offline version.
+   Fill this in and the app gains sign-in and cross-device sync.
+   Leave it empty and the app still works perfectly — it just keeps everything
+   on the one device, exactly like the offline version.
 
    Where the values come from:
-     Supabase dashboard -> your project -> Project Settings -> API
-       URL       -> SUPABASE_URL
-       anon public key -> SUPABASE_ANON_KEY
+     Firebase console -> your project -> Project settings -> General
+     -> Your apps -> Web app -> SDK setup and configuration -> Config
 
-   The anon key is designed to be public. It is safe in this file and safe in
-   a public GitHub repo. What protects your data is Row Level Security, which
-   supabase/schema.sql switches on — every row is locked to the user who
-   created it. Never put the service_role key here; that one is a master key.
+   It looks like this. Copy the values across:
+
+     const firebaseConfig = {
+       apiKey: "AIzaSy...",
+       authDomain: "your-project.firebaseapp.com",
+       projectId: "your-project",
+       storageBucket: "your-project.appspot.com",
+       messagingSenderId: "123456789",
+       appId: "1:1234:web:abcd"
+     };
+
+   The Firebase apiKey is NOT a secret. Google says so explicitly — it only
+   identifies your project to their servers. What protects your data is the
+   security rules in firestore.rules, which lock every document to the user
+   who created it. Ship this file publicly without worry.
 --------------------------------------------------------------------------- */
 
 window.KEIKO_CONFIG = {
-  SUPABASE_URL: "",
-  SUPABASE_ANON_KEY: "",
 
-  /* Set to true only after you have enabled the Google provider in
-     Supabase -> Authentication -> Providers. Email and password works
-     with no extra setup, so leave this false unless you want it. */
-  ENABLE_GOOGLE: false
+  const firebaseConfig = {
+    apiKey: "AIzaSyDuZub3ayHQ9EA-mXmPPeGiIa47hCUrlRM",
+    authDomain: "keiko-app-da5c5.firebaseapp.com",
+    projectId: "keiko-app-da5c5",
+    storageBucket: "keiko-app-da5c5.firebasestorage.app",
+    messagingSenderId: "545239509693",
+    appId: "1:545239509693:web:3d0dfd019bd17c0f3ca5d4",
+    measurementId: "G-FXC348S28N"
+  };
+  ENABLE_GOOGLE: true
 };
