@@ -1,6 +1,6 @@
 /* Daily Keiko service worker — offline first.
    Bump CACHE_VERSION whenever you change any file in PRECACHE. */
-var CACHE_VERSION = "keiko-v2";
+var CACHE_VERSION = "keiko-v3";
 var PRECACHE = [
   "/",
   "/index.html",
